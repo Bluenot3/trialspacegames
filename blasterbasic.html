@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZENverse: Cosmic Explorer - Fixed</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background-color: #000;
+            color: #0ff;
+        }
+        #gameCanvas {
+            width: 100vw;
+            height: 100vh;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 16px;
+            text-shadow: 0 0 5px #0ff;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .control-btn {
+            padding: 10px;
+            background-color: rgba(0, 255, 255, 0.2);
+            border: 1px solid #0ff;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .control-btn:hover {
+            background-color: rgba(0, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
+        <div>Location: <span id="location">Deep Space</span></div>
+        <div>Speed: <span id="speed">0</span> ly/s</div>
+        <div>Shield: <span id="shield">100%</span></div>
+        <div>Fuel: <span id="fuel">100%</span></div>
+    </div>
+    <div id="controls">
+        <button class="control-btn" id="thrust-forward">Thrust Forward</button>
+        <button class="control-btn" id="thrust-up">Thrust Up</button>
+        <button class="control-btn" id="thrust-right">Thrust Right</button>
+        <button class="control-btn" id="thrust-backward">Thrust Backward</button>
+        <button class="control-btn" id="thrust-down">Thrust Down</button>
+        <button class="control-btn" id="thrust-left">Thrust Left</button>
+        <button class="control-btn" id="rotate-left">Rotate Left</button>
+        <button class="control-btn" id="rotate-up">Rotate Up</button>
+        <button class="control-btn" id="rotate-right">Rotate Right</button>
+        <button class="control-btn" id="fire">Fire</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Initialize Three.js scene
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        // Enhanced Skybox
+        const skyboxLoader = new THREE.CubeTextureLoader();
+        const skyboxTexture = skyboxLoader.load([
+            'https://i.imgur.com/x9yxcXn.jpg',
+            'https://i.imgur.com/FGGIEnO.jpg',
+            'https://i.imgur.com/qr3Xljo.jpg',
+            'https://i.imgur.com/IlVFEf0.jpg',
+            'https://i.imgur.com/JKj0Qqc.jpg',
+            'https://i.imgur.com/3z4e2VP.jpg'
+        ]);
+        scene.background = skyboxTexture;
+
+        // Advanced Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.PointLight(0xffffcc, 1, 100);
+        sunLight.position.set(50, 30, 60);
+        scene.add(sunLight);
+
+        // Sun
+        const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
+        const sunMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            emissive: 0xffff00,
+            emissiveIntensity: 1
+        });
+        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        sun.position.set(50, 30, 60);
+        scene.add(sun);
+
+        // Spaceship
+        const shipGeometry = new THREE.ConeGeometry(0.5, 2, 32);
+        const shipMaterial = new THREE.MeshPhongMaterial({color: 0x00ff00});
+        const ship = new THREE.Mesh(shipGeometry, shipMaterial);
+        ship.rotation.x = Math.PI / 2;
+        scene.add(ship);
+
+        // Enhanced Stars
+        const starGeometry = new THREE.BufferGeometry();
+        const starMaterial = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.1,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true
+        });
+        const starVertices = [];
+        for (let i = 0; i < 15000; i++) {
+            const x = (Math.random() - 0.5) * 2000;
+            const y = (Math.random() - 0.5) * 2000;
+            const z = (Math.random() - 0.5) * 2000;
+            starVertices.push(x, y, z);
+        }
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // Planets and Asteroids
+        const objects = [];
+        const planetTextures = [
+            'https://i.imgur.com/qSjYQPl.jpg',
+            'https://i.imgur.com/0ULuQcP.jpg',
+            'https://i.imgur.com/JYpQB00.jpg',
+            'https://i.imgur.com/PvLd4YX.jpg',
+            'https://i.imgur.com/O3AvNGn.jpg'
+        ];
+
+        const textureLoader = new THREE.TextureLoader();
+
+        for (let i = 0; i < 20; i++) {
+            const size = Math.random() * 5 + 1;
+            let geometry, material;
+
+            if (i < 5) {
+                // Planets
+                geometry = new THREE.SphereGeometry(size, 32, 32);
+                const texture = textureLoader.load(planetTextures[i]);
+                material = new THREE.MeshPhongMaterial({ map: texture });
+            } else {
+                // Asteroids
+                geometry = new THREE.IcosahedronGeometry(size, 0);
+                material = new THREE.MeshStandardMaterial({
+                    color: 0x888888,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+            }
+
+            const object = new THREE.Mesh(geometry, material);
+            object.position.set(
+                (Math.random() - 0.5) * 200,
+                (Math.random() - 0.5) * 200,
+                (Math.random() - 0.5) * 200
+            );
+            object.userData.type = i < 5 ? 'planet' : 'asteroid';
+            object.userData.radius = size;
+            scene.add(object);
+            objects.push(object);
+        }
+
+        camera.position.z = 5;
+
+        // Controls
+        const keys = {};
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // Thrust controls
+        document.getElementById('thrust-forward').addEventListener('mousedown', () => keys['KeyW'] = true);
+        document.getElementById('thrust-forward').addEventListener('mouseup', () => keys['KeyW'] = false);
+        document.getElementById('thrust-backward').addEventListener('mousedown', () => keys['KeyS'] = true);
+        document.getElementById('thrust-backward').addEventListener('mouseup', () => keys['KeyS'] = false);
+        document.getElementById('thrust-left').addEventListener('mousedown', () => keys['KeyA'] = true);
+        document.getElementById('thrust-left').addEventListener('mouseup', () => keys['KeyA'] = false);
+        document.getElementById('thrust-right').addEventListener('mousedown', () => keys['KeyD'] = true);
+        document.getElementById('thrust-right').addEventListener('mouseup', () => keys['KeyD'] = false);
+        document.getElementById('thrust-up').addEventListener('mousedown', () => keys['ShiftLeft'] = true);
+        document.getElementById('thrust-up').addEventListener('mouseup', () => keys['ShiftLeft'] = false);
+        document.getElementById('thrust-down').addEventListener('mousedown', () => keys['ControlLeft'] = true);
+        document.getElementById('thrust-down').addEventListener('mouseup', () => keys['ControlLeft'] = false);
+
+        // Rotation controls
+        document.getElementById('rotate-left').addEventListener('mousedown', () => keys['ArrowLeft'] = true);
+        document.getElementById('rotate-left').addEventListener('mouseup', () => keys['ArrowLeft'] = false);
+        document.getElementById('rotate-right').addEventListener('mousedown', () => keys['ArrowRight'] = true);
+        document.getElementById('rotate-right').addEventListener('mouseup', () => keys['ArrowRight'] = false);
+        document.getElementById('rotate-up').addEventListener('mousedown', () => keys['ArrowUp'] = true);
+        document.getElementById('rotate-up').addEventListener('mouseup', () => keys['ArrowUp'] = false);
+
+        // Fire control
+        document.getElementById('fire').addEventListener('click', fireLaser);
+
+        function updateShip() {
+            if (keys['KeyW']) ship.translateZ(-0.1);
+            if (keys['KeyS']) ship.translateZ(0.1);
+            if (keys['KeyA']) ship.translateX(-0.1);
+            if (keys['KeyD']) ship.translateX(0.1);
+            if (keys['ShiftLeft']) ship.translateY(0.1);
+            if (keys['ControlLeft']) ship.translateY(-0.1);
+
+            if (keys['ArrowLeft']) ship.rotateY(0.02);
+            if (keys['ArrowRight']) ship.rotateY(-0.02);
+            if (keys['ArrowUp']) ship.rotateX(-0.02);
+            if (keys['ArrowDown']) ship.rotateX(0.02);
+
+            camera.position.copy(ship.position);
+            camera.position.add(ship.localToWorld(new THREE.Vector3(0, 0, 5)));
+            camera.lookAt(ship.position);
+        }
+
+        function fireLaser() {
+            const laserGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
+            const laserMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+            const laser = new THREE.Mesh(laserGeometry, laserMaterial);
+            
+            laser.position.copy(ship.position);
+            laser.quaternion.copy(ship.quaternion);
+            laser.translateZ(-1);
+            
+            scene.add(laser);
+            
+            const direction = new THREE.Vector3(0, 0, -1);
+            direction.applyQuaternion(ship.quaternion);
+            
+            function updateLaser() {
+                laser.translateZ(-0.5);
+                
+                // Check for collision
+                objects.forEach((object, index) => {
+                    if (laser.position.distanceTo(object.position) < object.userData.radius) {
+                        scene.remove(laser);
+                        if (object.userData.type === 'asteroid') {
+                            scene.remove(object);
+                            objects.splice(index, 1);
+                        }
+                    }
+                });
+                
+                if (laser.position.length() > 100) {
+                    scene.remove(laser);
+                } else {
+                    requestAnimationFrame(updateLaser);
+                }
+            }
+            
+            updateLaser();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updateShip();
+
+            // Rotate planets and asteroids
+            objects.forEach(object => {
+                if (object.userData.type === 'planet') {
+                    object.rotation.y += 0.002;
+                } else {
+                    object.rotation.x += 0.01;
+                    object.rotation.y += 0.01;
+                }
+            });
+
+            // Animate stars
+            const positions = stars.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i + 2] += 0.05;
+                if (positions[i + 2] > 1000) {
+                    positions[i + 2] -= 2000;
+                }
+            }
+            stars.geometry.attributes.position.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Update HUD
+        setInterval(() => {
+            document.getElementById('speed').textContent = (Math.random() * 10).toFixed(2);
+            document.getElementById('shield').textContent = `${Math.round(Math.random() * 20 + 80)}%`;
+            document.getElementById('fuel').textContent = `${Math.round(Math.random() * 20 + 80)}%`;
+        }, 1000);
+
+        // Simulating location changes
+        const locations = ['Deep Space', 'Andromeda Galaxy', 'Orion Nebula', 'Alpha Centauri'];
+        setInterval(() => {
+            const location = locations[Math.floor(Math.random() * locations.length)];
+            document.getElementById('location').textContent = location;
+        }, 10000);
+    </script>
+</body>
+</html>
